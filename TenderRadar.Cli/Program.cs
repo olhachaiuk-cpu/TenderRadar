@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,8 +18,22 @@ builder.Services.Configure<TedOptions>(
     builder.Configuration.GetSection(TedOptions.SectionName));
 builder.Services.Configure<ScoringOptions>(
     builder.Configuration.GetSection(ScoringOptions.SectionName));
-builder.Services.AddSingleton(sp =>
-    new RelevanceScorer(sp.GetRequiredService<IOptions<ScoringOptions>>().Value));
+
+builder.Services.AddSingleton(_ =>
+{
+    using var doc = JsonDocument.Parse(File.ReadAllText("cpv-codes.json"));
+    var root = doc.RootElement;
+
+    string[] Read(string name) => root.TryGetProperty(name, out var el)
+        ? el.EnumerateArray().Select(x => x.GetString()!).ToArray()
+        : [];
+
+    return new CpvCatalog(Read("DirectHit"), Read("Development"));
+});
+
+builder.Services.AddSingleton(sp => new RelevanceScorer(
+    sp.GetRequiredService<IOptions<ScoringOptions>>().Value,
+    sp.GetRequiredService<CpvCatalog>()));
 
 builder.Services.AddHttpClient<TedApiClient>((sp, c) =>
 {
@@ -32,7 +47,7 @@ var host = builder.Build();
 var client = host.Services.GetRequiredService<TedApiClient>();
 var tedOptions = host.Services.GetRequiredService<IOptions<TedOptions>>().Value;
 var scoringOptions = host.Services.GetRequiredService<IOptions<ScoringOptions>>().Value;
-var scorer = host.Services.GetRequiredService<RelevanceScorer>();   // ← додати
+var scorer = host.Services.GetRequiredService<RelevanceScorer>();
 
 var from = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-tedOptions.LookbackDays);
 
@@ -54,27 +69,21 @@ var tenders = result.Notices
     .Select(t => t!)
     .ToList();
 
-Console.WriteLine($"Ключових слів у конфізі: {scoringOptions.Keywords.Length}, поріг: {scoringOptions.MinScore}");
-if (scoringOptions.Keywords.Length > 0)
-    Console.WriteLine($"Перше: '{scoringOptions.Keywords[0].Phrase}' (вага {scoringOptions.Keywords[0].Weight})");
-
-Console.WriteLine($"SearchText прикладу:\n{tenders.FirstOrDefault()?.SearchText[..200]}...");
-
 foreach (var t in tenders)
     scorer.Score(t);
 
 var relevant = tenders
-    .Where(t => t.Score > 0)
+    .Where(t => t.Score >= scoringOptions.MinScore)
     .OrderByDescending(t => t.Score)
     .ToList();
 
-Console.WriteLine($"Релевантних: {relevant.Count} з {tenders.Count}");
+Console.WriteLine($"Отримано: {tenders.Count}, релевантних: {relevant.Count} (поріг {scoringOptions.MinScore})");
 
 foreach (var t in relevant)
 {
     Console.WriteLine($"""
                        {t.PublicationNumber} | {t.Country} | {t.PublicationDate:yyyy-MM-dd} | score {t.Score}
-                         {t.Title}
+                         {t.ShortTitle ?? t.Title}
                          Збіги:    {string.Join(", ", t.MatchedKeywords)}
                          Замовник: {t.BuyerName}
                          Дедлайн:  {t.SubmissionDeadline?.ToString("yyyy-MM-dd HH:mm") ?? "-"}
@@ -83,3 +92,7 @@ foreach (var t in relevant)
                          {t.Url}
                        """);
 }
+
+var withText = tenders.Count(t => !string.IsNullOrEmpty(t.SearchText));
+Console.WriteLine($"З непорожнім SearchText: {withText}");
+Console.WriteLine($"Приклад: {tenders[0].SearchText}");

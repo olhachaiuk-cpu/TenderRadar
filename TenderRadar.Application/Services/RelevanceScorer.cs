@@ -4,15 +4,29 @@ using TenderRadar.Domain;
 
 namespace TenderRadar.Application.Services;
 
-public sealed class RelevanceScorer(ScoringOptions options)
+public sealed class RelevanceScorer(ScoringOptions options, CpvCatalog cpvCatalog)
 {
     public void Score(Tender tender)
     {
+        var score = 0;
+        var matched = new List<string>();
+
+        var cpv = cpvCatalog.Match(tender.CpvCodes);
+
+        if (IsSignificant(cpv.DirectCount, cpv.Total))
+        {
+            score += options.CpvWeights.DirectHit;
+            matched.Add($"cpv:direct {cpv.DirectCount}/{cpv.Total}");
+        }
+        else if (IsSignificant(cpv.DevelopmentCount, cpv.Total))
+        {
+            score += options.CpvWeights.Development;
+            matched.Add($"cpv:dev {cpv.DevelopmentCount}/{cpv.Total}");
+        }
+
         var haystack = string.IsNullOrEmpty(tender.SearchText)
             ? tender.Title
             : tender.SearchText;
-        var matched = new List<string>();
-        var score = 0;
 
         foreach (var rule in options.Keywords)
         {
@@ -37,4 +51,7 @@ public sealed class RelevanceScorer(ScoringOptions options)
 
         return text.Contains(rule.Phrase, StringComparison.OrdinalIgnoreCase);
     }
+    
+    private static bool IsSignificant(int count, int total)
+        => count > 0 && (count >= 2 || (double)count / total >= 0.34);
 }

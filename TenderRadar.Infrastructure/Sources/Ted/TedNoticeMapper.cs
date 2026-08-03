@@ -23,6 +23,7 @@ public static class TedNoticeMapper
             PublicationNumber = notice.PublicationNumber,
             Source            = Source,
             Title             = title,
+            ShortTitle        = ExtractShortTitle(title),
             BuyerName         = PickFirstFromLists(notice.BuyerName),
             Country           = notice.BuyerCountry?.Distinct().FirstOrDefault(),
             PublicationDate   = ParseDate(notice.PublicationDate),
@@ -32,9 +33,7 @@ public static class TedNoticeMapper
             Currency          = notice.TotalValueCurrency?.Distinct().FirstOrDefault(),
             Url               = BuildUrl(notice.PublicationNumber),
             FirstSeenAt       = DateTimeOffset.UtcNow,
-            SearchText = notice.NoticeTitle is null
-                ? string.Empty
-                : string.Join(" | ", notice.NoticeTitle.Values),
+            SearchText        = BuildSearchText(notice.NoticeTitle),
         };
     }
 
@@ -87,8 +86,24 @@ public static class TedNoticeMapper
     
     private static string? ExtractShortTitle(string title)
     {
-        var idx = title.LastIndexOf(" – ", StringComparison.Ordinal);
-        return idx > 0 ? title[(idx + 3)..].Trim() : null;
+        const string sep = " – ";
+        var first = title.IndexOf(sep, StringComparison.Ordinal);
+        if (first < 0) return null;
+
+        var second = title.IndexOf(sep, first + sep.Length, StringComparison.Ordinal);
+        if (second < 0) return null;
+
+        var result = title[(second + sep.Length)..].Trim();
+        return result.Length > 0 ? result : null;
+    }
+    
+    private static string BuildSearchText(Dictionary<string, string>? titles)
+    {
+        if (titles is null || titles.Count == 0) return string.Empty;
+
+        return string.Join(" | ", titles.Values
+            .Select(t => ExtractShortTitle(t) ?? t)
+            .Distinct());
     }
 
     private static string BuildUrl(string publicationNumber)
