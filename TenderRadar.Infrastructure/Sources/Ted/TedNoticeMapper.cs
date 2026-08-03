@@ -31,7 +31,10 @@ public static class TedNoticeMapper
             EstimatedValue    = notice.TotalValue,
             Currency          = notice.TotalValueCurrency?.Distinct().FirstOrDefault(),
             Url               = BuildUrl(notice.PublicationNumber),
-            FirstSeenAt       = DateTimeOffset.UtcNow
+            FirstSeenAt       = DateTimeOffset.UtcNow,
+            SearchText = notice.NoticeTitle is null
+                ? string.Empty
+                : string.Join(" | ", notice.NoticeTitle.Values),
         };
     }
 

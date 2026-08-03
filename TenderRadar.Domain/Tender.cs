@@ -18,4 +18,5 @@ public class Tender
     public int Score { get; set; }
     public DateTimeOffset FirstSeenAt { get; set; }
     public DateTimeOffset? ExportedAt { get; set; }
+    public string SearchText { get; set; } = "";
 }
