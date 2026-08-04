@@ -28,8 +28,18 @@ public sealed class GoogleSheetsExporter : ITenderExporter
     {
         _options = options;
 
-        var credPath = Path.Combine(AppContext.BaseDirectory, options.CredentialsPath);
-        var credential = GoogleCredential.FromFile(credPath).CreateScoped(Scopes);
+        var credentialsJson = Environment.GetEnvironmentVariable("GOOGLE_CREDENTIALS_JSON");
+
+        GoogleCredential credential;
+        if (!string.IsNullOrEmpty(credentialsJson))
+        {
+            credential = GoogleCredential.FromJson(credentialsJson).CreateScoped(Scopes);
+        }
+        else
+        {
+            var credPath = Path.Combine(AppContext.BaseDirectory, options.CredentialsPath);
+            credential = GoogleCredential.FromFile(credPath).CreateScoped(Scopes);
+        }
 
         _service = new SheetsService(new BaseClientService.Initializer
         {
