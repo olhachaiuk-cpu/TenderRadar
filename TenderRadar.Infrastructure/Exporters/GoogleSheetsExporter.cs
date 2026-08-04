@@ -17,8 +17,8 @@ public sealed class GoogleSheetsExporter : ITenderExporter
     private static readonly string[] Scopes = [SheetsService.Scope.Spreadsheets];
     private static readonly string[] Headers =
     [
-        "Додано", "Дата публікації", "Дедлайн", "Назва",
-        "Замовник", "Опис", "Країна", "CPV", "Сума", "Валюта", "Ключові слова", "Посилання"
+        "Додано", "Дата публікації", "Дедлайн", "Назва", "Назва ENG",
+        "Замовник", "Опис", "Опис ENG", "Країна", "CPV", "Сума", "Валюта", "Ключові слова", "Посилання"
     ];
 
     private readonly GoogleSheetsOptions _options;
@@ -46,26 +46,6 @@ public sealed class GoogleSheetsExporter : ITenderExporter
             HttpClientInitializer = credential,
             ApplicationName = "TenderRadar"
         });
-    }
-
-    public async Task<int> ExportNewAsync(IReadOnlyCollection<Tender> tenders, CancellationToken ct = default)
-    {
-        if (tenders.Count == 0) return 0;
-
-        await EnsureHeaderAsync(ct);
-
-        var rows = tenders.Select(ToRow).ToList();
-
-        var range = $"{_options.SheetName}!A:{ColumnLetter(Headers.Length)}";
-        var body = new ValueRange { Values = rows };
-
-        var request = _service.Spreadsheets.Values.Append(body, _options.SpreadsheetId, range);
-        request.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
-        request.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
-
-        await request.ExecuteAsync(ct);
-
-        return tenders.Count;
     }
 
     private async Task EnsureHeaderAsync(CancellationToken ct)
@@ -97,15 +77,48 @@ public sealed class GoogleSheetsExporter : ITenderExporter
 
         return string.Join(", ", parts);
     }
+    
+    public async Task<int> ExportNewAsync(IReadOnlyCollection<Tender> tenders, CancellationToken ct = default)
+    {
+        if (tenders.Count == 0) return 0;
 
-    private static IList<object> ToRow(Tender t) =>
+        await EnsureHeaderAsync(ct);
+
+        var startRow = await GetNextRowNumberAsync(ct);
+
+        var rows = tenders
+            .Select((t, i) => ToRow(t, startRow + i))
+            .ToList();
+
+        var range = $"{_options.SheetName}!A{startRow}";
+        var body = new ValueRange { Values = rows };
+
+        var request = _service.Spreadsheets.Values.Update(body, _options.SpreadsheetId, range);
+        request.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+
+        await request.ExecuteAsync(ct);
+
+        return tenders.Count;
+    }
+
+    private async Task<int> GetNextRowNumberAsync(CancellationToken ct)
+    {
+        var range = $"{_options.SheetName}!A:A";
+        var response = await _service.Spreadsheets.Values.Get(_options.SpreadsheetId, range).ExecuteAsync(ct);
+        var filledRows = response.Values?.Count ?? 0;
+        return filledRows + 1;
+    }
+
+    private static IList<object> ToRow(Tender t, int row) =>
     [
         t.FirstSeenAt.ToString("yyyy-MM-dd"),
         t.PublicationDate.ToString("yyyy-MM-dd"),
         t.SubmissionDeadline?.ToString("yyyy-MM-dd HH:mm") ?? "",
         t.ShortTitle ?? t.Title,
+        $"=GOOGLETRANSLATE(D{row},\"auto\",\"en\")",
         t.BuyerName ?? "",
         t.Summary ?? "",
+        $"=GOOGLETRANSLATE(G{row},\"auto\",\"en\")",
         t.Country ?? "",
         string.Join(", ", t.CpvCodes.Take(5)),
         t.EstimatedValue?.ToString() ?? "",
