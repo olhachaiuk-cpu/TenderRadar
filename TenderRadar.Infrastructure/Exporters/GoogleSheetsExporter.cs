@@ -18,7 +18,7 @@ public sealed class GoogleSheetsExporter : ITenderExporter
     private static readonly string[] Headers =
     [
         "Додано", "Дата публікації", "Дедлайн", "Score", "Назва",
-        "Замовник", "Країна", "CPV", "Сума", "Валюта", "Ключові слова", "Посилання"
+        "Замовник", "Опис", "Країна", "CPV", "Сума", "Валюта", "Ключові слова", "Посилання"
     ];
 
     private readonly GoogleSheetsOptions _options;
@@ -46,7 +46,7 @@ public sealed class GoogleSheetsExporter : ITenderExporter
 
         var rows = tenders.Select(ToRow).ToList();
 
-        var range = $"{_options.SheetName}!A:L";
+        var range = $"{_options.SheetName}!A:{ColumnLetter(Headers.Length)}";
         var body = new ValueRange { Values = rows };
 
         var request = _service.Spreadsheets.Values.Append(body, _options.SpreadsheetId, range);
@@ -60,7 +60,7 @@ public sealed class GoogleSheetsExporter : ITenderExporter
 
     private async Task EnsureHeaderAsync(CancellationToken ct)
     {
-        var range = $"{_options.SheetName}!A1:L1";
+        var range = $"{_options.SheetName}!A1:{ColumnLetter(Headers.Length)}1";
         var response = await _service.Spreadsheets.Values.Get(_options.SpreadsheetId, range).ExecuteAsync(ct);
 
         if (response.Values is { Count: > 0 }) return;
@@ -71,6 +71,12 @@ public sealed class GoogleSheetsExporter : ITenderExporter
 
         await request.ExecuteAsync(ct);
     }
+    
+    private static string ColumnLetter(int count)
+    {
+        var letter = (char)('A' + count - 1);
+        return letter.ToString();
+    }
 
     private static IList<object> ToRow(Tender t) =>
     [
@@ -80,6 +86,7 @@ public sealed class GoogleSheetsExporter : ITenderExporter
         t.Score,
         t.ShortTitle ?? t.Title,
         t.BuyerName ?? "",
+        t.Summary ?? "",
         t.Country ?? "",
         string.Join(", ", t.CpvCodes.Take(5)),
         t.EstimatedValue?.ToString() ?? "",

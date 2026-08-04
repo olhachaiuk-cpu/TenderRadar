@@ -79,6 +79,9 @@ namespace TenderRadar.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("SubmissionDeadline")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Summary")
+                        .HasColumnType("text");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(2000)

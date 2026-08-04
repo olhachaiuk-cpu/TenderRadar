@@ -19,4 +19,5 @@ public class Tender
     public DateTimeOffset FirstSeenAt { get; set; }
     public DateTimeOffset? ExportedAt { get; set; }
     public string SearchText { get; set; } = "";
+    public string? Summary { get; set; }
 }

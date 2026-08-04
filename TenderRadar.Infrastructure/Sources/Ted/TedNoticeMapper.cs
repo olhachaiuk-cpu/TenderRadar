@@ -8,6 +8,7 @@ public static class TedNoticeMapper
 {
     private const string Source = "TED";
     private const string PreferredLanguage = "eng";
+    private const int SummaryMaxLength = 300;
 
     public static Tender? Map(TedNotice notice)
     {
@@ -34,6 +35,7 @@ public static class TedNoticeMapper
             Url               = BuildUrl(notice.PublicationNumber),
             FirstSeenAt       = DateTimeOffset.UtcNow,
             SearchText        = BuildSearchText(notice.NoticeTitle),
+            Summary = BuildSummary(notice.DescriptionLot),
         };
     }
 
@@ -104,6 +106,17 @@ public static class TedNoticeMapper
         return string.Join(" | ", titles.Values
             .Select(t => ExtractShortTitle(t) ?? t)
             .Distinct());
+    }
+    
+    private static string? BuildSummary(Dictionary<string, List<string>>? dict)
+    {
+        var text = PickFirstFromLists(dict);
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        text = text.Trim();
+        return text.Length <= SummaryMaxLength
+            ? text
+            : text[..SummaryMaxLength].TrimEnd() + "…";
     }
 
     private static string BuildUrl(string publicationNumber)

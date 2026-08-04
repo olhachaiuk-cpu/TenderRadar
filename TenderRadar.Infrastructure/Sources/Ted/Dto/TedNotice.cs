@@ -30,4 +30,7 @@ public sealed class TedNotice
 
     [JsonPropertyName("total-value-cur")]
     public List<string>? TotalValueCurrency { get; init; }
+    
+    [JsonPropertyName("description-lot")]
+    public Dictionary<string, List<string>>? DescriptionLot { get; init; }
 }
