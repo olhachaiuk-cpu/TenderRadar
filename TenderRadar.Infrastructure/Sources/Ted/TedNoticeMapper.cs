@@ -78,7 +78,7 @@ public static class TedNoticeMapper
                 s, CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var d) ? d : (DateTimeOffset?)null)
             .Where(d => d.HasValue)
-            .Select(d => d!.Value)
+            .Select(d => d!.Value.ToUniversalTime())
             .ToList();
 
         return parsed.Count > 0 ? parsed.Min() : null;
