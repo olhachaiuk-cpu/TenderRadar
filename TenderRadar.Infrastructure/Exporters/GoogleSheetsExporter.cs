@@ -92,11 +92,6 @@ public sealed class GoogleSheetsExporter : ITenderExporter
     {
         var parts = new List<string>();
 
-        if (t.MatchedKeywords.Any(m => m.StartsWith("cpv:direct")))
-            parts.Add("Пряме влучення (CPV)");
-        else if (t.MatchedKeywords.Any(m => m.StartsWith("cpv:dev")))
-            parts.Add("Розробка/інтеграція (CPV)");
-
         var keywords = t.MatchedKeywords.Where(m => !m.StartsWith("cpv:"));
         parts.AddRange(keywords);
 
