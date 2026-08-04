@@ -12,7 +12,11 @@ public sealed class TenderRepository(AppDbContext db) : ITenderRepository
 {
     public async Task UpsertRangeAsync(IEnumerable<Tender> tenders, CancellationToken ct = default)
     {
-        var incoming = tenders.ToList();
+        var incoming = tenders
+            .GroupBy(t => (t.Source, t.PublicationNumber))
+            .Select(g => g.Last())
+            .ToList();
+
         var sources = incoming.Select(t => t.Source).Distinct().ToList();
         var numbers = incoming.Select(t => t.PublicationNumber).ToList();
 

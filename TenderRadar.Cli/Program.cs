@@ -3,19 +3,22 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Polly;
 using TenderRadar.Application.Configuration;
 using TenderRadar.Application.Services;
+using TenderRadar.Domain;
 using TenderRadar.Infrastructure.Persistence;
 using TenderRadar.Infrastructure.Sources.Ted;
-using TenderRadar.Infrastructure.Sources.Ted.Dto;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 
 builder.Services.Configure<TedOptions>(
     builder.Configuration.GetSection(TedOptions.SectionName));
@@ -29,7 +32,8 @@ builder.Services.AddScoped<ITenderRepository, TenderRepository>();
 
 builder.Services.AddSingleton(_ =>
 {
-    using var doc = JsonDocument.Parse(File.ReadAllText("cpv-codes.json"));
+    var path = Path.Combine(AppContext.BaseDirectory, "cpv-codes.json");
+    using var doc = JsonDocument.Parse(File.ReadAllText(path));
     var root = doc.RootElement;
 
     string[] Read(string name) => root.TryGetProperty(name, out var el)
@@ -48,6 +52,19 @@ builder.Services.AddHttpClient<TedApiClient>((sp, c) =>
     var opt = sp.GetRequiredService<IOptions<TedOptions>>().Value;
     c.BaseAddress = new Uri(opt.BaseUrl);
     c.Timeout = TimeSpan.FromSeconds(opt.TimeoutSeconds);
+})
+.AddResilienceHandler("ted-retry", pipeline =>
+{
+    pipeline.AddRetry(new HttpRetryStrategyOptions
+    {
+        MaxRetryAttempts = 5,
+        BackoffType = DelayBackoffType.Exponential,
+        Delay = TimeSpan.FromSeconds(2),
+        UseJitter = true,
+        ShouldHandle = args => ValueTask.FromResult(
+            args.Outcome.Result?.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+            || args.Outcome.Result?.StatusCode >= System.Net.HttpStatusCode.InternalServerError)
+    });
 });
 
 var host = builder.Build();
@@ -60,23 +77,27 @@ var scorer = host.Services.GetRequiredService<RelevanceScorer>();
 
 var from = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-tedOptions.LookbackDays);
 
-var request = new TedSearchRequest
+var query = $"classification-cpv IN ({string.Join(' ', tedOptions.CpvCodes)}) " +
+            $"AND publication-date >= {from:yyyyMMdd}";
+
+Console.WriteLine($"Query: {query}");
+
+var tenders = new List<Tender>();
+
+await foreach (var notice in client.SearchAllAsync(
+                   query, tedOptions.Fields, tedOptions.PageLimit, tedOptions.MaxPages))
 {
-    Query = $"classification-cpv IN ({string.Join(' ', tedOptions.CpvCodes)}) " +
-            $"AND publication-date >= {from:yyyyMMdd}",
-    Fields = tedOptions.Fields,
-    Limit = 250
-};
+    var tender = TedNoticeMapper.Map(notice);
+    if (tender is not null)
+        tenders.Add(tender);
+}
 
-var result = await client.SearchAsync(request);
-Console.WriteLine($"Query: {request.Query}");
-Console.WriteLine($"Total: {result.TotalNoticeCount}");
-
-var tenders = result.Notices
-    .Select(TedNoticeMapper.Map)
-    .Where(t => t is not null)
-    .Select(t => t!)
+tenders = tenders
+    .GroupBy(t => (t.Source, t.PublicationNumber))
+    .Select(g => g.Last())
     .ToList();
+
+Console.WriteLine($"Отримано (унікальних): {tenders.Count}");
 
 foreach (var t in tenders)
     scorer.Score(t);
@@ -88,7 +109,7 @@ var relevant = tenders
     .OrderByDescending(t => t.Score)
     .ToList();
 
-Console.WriteLine($"Отримано: {tenders.Count}, збережено в БД: {tenders.Count}, релевантних: {relevant.Count} (поріг {scoringOptions.MinScore})");
+Console.WriteLine($"Отримано: {tenders.Count}, релевантних: {relevant.Count} (поріг {scoringOptions.MinScore})");
 
 foreach (var t in relevant)
 {

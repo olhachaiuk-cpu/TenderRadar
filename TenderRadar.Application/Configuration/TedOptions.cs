@@ -10,4 +10,5 @@ public sealed class TedOptions
     public int LookbackDays { get; init; } = 7;
     public string[] CpvCodes { get; init; } = [];
     public string[] Fields { get; init; } = [];
+    public int MaxPages { get; init; } = 20;
 }
