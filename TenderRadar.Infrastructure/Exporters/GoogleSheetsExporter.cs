@@ -17,7 +17,7 @@ public sealed class GoogleSheetsExporter : ITenderExporter
     private static readonly string[] Scopes = [SheetsService.Scope.Spreadsheets];
     private static readonly string[] Headers =
     [
-        "Додано", "Дата публікації", "Дедлайн", "Score", "Назва",
+        "Додано", "Дата публікації", "Дедлайн", "Назва",
         "Замовник", "Опис", "Країна", "CPV", "Сума", "Валюта", "Ключові слова", "Посилання"
     ];
 
@@ -87,13 +87,27 @@ public sealed class GoogleSheetsExporter : ITenderExporter
         var letter = (char)('A' + count - 1);
         return letter.ToString();
     }
+    
+    private static string FormatMatches(Tender t)
+    {
+        var parts = new List<string>();
+
+        if (t.MatchedKeywords.Any(m => m.StartsWith("cpv:direct")))
+            parts.Add("Пряме влучення (CPV)");
+        else if (t.MatchedKeywords.Any(m => m.StartsWith("cpv:dev")))
+            parts.Add("Розробка/інтеграція (CPV)");
+
+        var keywords = t.MatchedKeywords.Where(m => !m.StartsWith("cpv:"));
+        parts.AddRange(keywords);
+
+        return string.Join(", ", parts);
+    }
 
     private static IList<object> ToRow(Tender t) =>
     [
         t.FirstSeenAt.ToString("yyyy-MM-dd"),
         t.PublicationDate.ToString("yyyy-MM-dd"),
         t.SubmissionDeadline?.ToString("yyyy-MM-dd HH:mm") ?? "",
-        t.Score,
         t.ShortTitle ?? t.Title,
         t.BuyerName ?? "",
         t.Summary ?? "",
@@ -101,7 +115,7 @@ public sealed class GoogleSheetsExporter : ITenderExporter
         string.Join(", ", t.CpvCodes.Take(5)),
         t.EstimatedValue?.ToString() ?? "",
         t.Currency ?? "",
-        string.Join(", ", t.MatchedKeywords),
+        FormatMatches(t),
         t.Url
     ];
 }
