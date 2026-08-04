@@ -14,6 +14,8 @@ using TenderRadar.Infrastructure.Exporters;
 using TenderRadar.Infrastructure.Persistence;
 using TenderRadar.Infrastructure.Sources.Ted;
 
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 var builder = Host.CreateApplicationBuilder(args);
