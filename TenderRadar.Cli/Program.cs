@@ -136,5 +136,16 @@ foreach (var t in relevant)
 }
 
 var exporter = host.Services.GetRequiredService<ITenderExporter>();
-var exported = await exporter.ExportNewAsync(relevant);
-Console.WriteLine($"Експортовано в Sheets: {exported}");
+var relevantKeys = relevant.Select(t => (t.Source, t.PublicationNumber)).ToList();
+var alreadyExported = await repo.GetExportedKeysAsync(relevantKeys);
+
+var toExport = relevant
+    .Where(t => !alreadyExported.Contains((t.Source, t.PublicationNumber)))
+    .ToList();
+
+var exported = await exporter.ExportNewAsync(toExport);
+
+if (exported > 0)
+    await repo.MarkExportedAsync(toExport.Select(t => (t.Source, t.PublicationNumber)));
+
+Console.WriteLine($"Релевантних: {relevant.Count}, вже було в Sheets: {alreadyExported.Count}, нових експортовано: {exported}");
