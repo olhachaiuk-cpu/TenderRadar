@@ -24,6 +24,12 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      - name: Debug TED response
+          run: |
+            curl -v -X POST https://api.ted.europa.eu/v3/notices/search \
+              -H "Content-Type: application/json" \
+              -d '{"query":"FT ~ \"software\"","fields":["publication-number"],"limit":1,"scope":"ACTIVE"}'
+
       - name: Run TenderRadar
         working-directory: TenderRadar.Cli
         env:
