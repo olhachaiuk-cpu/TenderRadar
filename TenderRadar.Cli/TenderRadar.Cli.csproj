@@ -25,6 +25,7 @@
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="cpv-codes.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="secrets\google-credentials.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

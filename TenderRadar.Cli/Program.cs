@@ -10,6 +10,7 @@ using Polly;
 using TenderRadar.Application.Configuration;
 using TenderRadar.Application.Services;
 using TenderRadar.Domain;
+using TenderRadar.Infrastructure.Exporters;
 using TenderRadar.Infrastructure.Persistence;
 using TenderRadar.Infrastructure.Sources.Ted;
 
@@ -29,6 +30,15 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 builder.Services.AddScoped<ITenderRepository, TenderRepository>();
+
+builder.Services.Configure<GoogleSheetsOptions>(
+    builder.Configuration.GetSection(GoogleSheetsOptions.SectionName));
+
+builder.Services.AddSingleton(sp =>
+    new GoogleSheetsExporter(sp.GetRequiredService<IOptions<GoogleSheetsOptions>>().Value));
+
+builder.Services.AddSingleton<ITenderExporter>(sp =>
+    sp.GetRequiredService<GoogleSheetsExporter>());
 
 builder.Services.AddSingleton(_ =>
 {
@@ -124,3 +134,7 @@ foreach (var t in relevant)
                          {t.Url}
                        """);
 }
+
+var exporter = host.Services.GetRequiredService<ITenderExporter>();
+var exported = await exporter.ExportNewAsync(relevant);
+Console.WriteLine($"Експортовано в Sheets: {exported}");
